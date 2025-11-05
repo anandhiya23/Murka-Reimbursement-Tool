@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Murka Reimbursement Tool</title>
+    <style>
+        :root{
+            --bg:#f5f7fb; --card:#fff; --muted:#6b7280; --accent:#2563eb;
+            --danger:#dc2626; --success:#16a34a;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        }
+        html,body{height:100%; margin:0; background:var(--bg); color:#0f172a}
+        .app{
+            max-width:1100px; margin:28px auto; padding:18px;
+        }
+        header{display:flex; align-items:center; gap:16px; margin-bottom:18px}
+        header h1{font-size:20px; margin:0}
+        .grid{
+            display:grid; gap:18px;
+            grid-template-columns: 380px 1fr;
+        }
+        .card{
+            background:var(--card); padding:14px; border-radius:10px; box-shadow:0 1px 2px rgba(2,6,23,0.06);
+        }
+        label{display:block; font-size:13px; color:var(--muted); margin-top:10px}
+        input[type="text"], input[type="number"], input[type="date"], select, textarea {
+            width:100%; padding:8px 10px; margin-top:6px; border:1px solid #e6e9ef; border-radius:8px; box-sizing:border-box;
+            font-size:14px; background:white;
+        }
+        textarea{min-height:84px; resize:vertical}
+        .row{display:flex; gap:10px}
+        .row > *{flex:1}
+        button{background:var(--accent); color:white; border:0; padding:10px 12px; border-radius:8px; cursor:pointer}
+        button.secondary{background:#e6eefc; color:var(--accent); border:1px solid rgba(37,99,235,0.08)}
+        .muted{color:var(--muted); font-size:13px}
+        .controls{display:flex; gap:8px; align-items:center; margin-bottom:12px}
+        .filters{display:flex; gap:8px; align-items:center; margin-left:auto}
+        table{width:100%; border-collapse:collapse; font-size:14px}
+        th,td{padding:10px 8px; text-align:left; border-bottom:1px solid #f1f5f9}
+        th{font-weight:600; color:var(--muted); font-size:13px}
+        .small{font-size:12px; color:var(--muted)}
+        .actions button{margin-right:6px; padding:6px 8px; font-size:13px; border-radius:6px}
+        .badge{display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px}
+        .badge.pending{background:#fff7ed; color:#92400e}
+        .badge.approved{background:#ecfdf5; color:var(--success)}
+        .badge.rejected{background:#fff1f2; color:var(--danger)}
+        .totals{display:flex; gap:10px; margin-top:10px}
+        .tot-box{background:#f8fafc; padding:10px; border-radius:8px; flex:1; text-align:center}
+        .tot-amount{font-weight:700; font-size:18px}
+        .receipt-preview{max-width:320px; max-height:240px; object-fit:contain; border-radius:6px; border:1px solid #e6eefc; background:white}
+        .empty{padding:24px; text-align:center; color:var(--muted)}
+        /* responsive */
+        @media (max-width:920px){
+            .grid{grid-template-columns: 1fr}
+            header{flex-direction:column; align-items:flex-start; gap:8px}
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>Murka Reimbursement Tool</h1>
+            <div class="muted">Quick front-end for submitting and tracking reimbursements (local-only)</div>
+        </header>
+
+        <div class="grid">
+            <div class="card" id="form-card">
+                <form id="reim-form">
+                    <input type="hidden" id="editingId" value="">
+                    <label for="date">Date</label>
+                    <input id="date" type="date" required>
+
+                    <label for="employee">Employee</label>
+                    <input id="employee" type="text" placeholder="Full name" required>
+
+                    <div class="row">
+                        <div>
+                            <label for="category">Category</label>
+                            <select id="category">
+                                <option>Travel</option>
+                                <option>Meals</option>
+                                <option>Office Supplies</option>
+                                <option>Software</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="amount">Amount (USD)</label>
+                            <input id="amount" type="number" step="0.01" min="0" required>
+                        </div>
+                    </div>
+
+                    <label for="desc">Description / Notes</label>
+                    <textarea id="desc" placeholder="Explain purpose, attendees, etc."></textarea>
+
+                    <label for="receipt">Receipt (image/pdf) — optional</label>
+                    <input id="receipt" type="file" accept="image/*,.pdf">
+
+                    <label for="status">Status</label>
+                    <select id="status">
+                        <option>Pending</option>
+                        <option>Approved</option>
+                        <option>Rejected</option>
+                    </select>
+
+                    <div style="display:flex; gap:8px; margin-top:12px;">
+                        <button type="submit" id="saveBtn">Add Reimbursement</button>
+                        <button type="button" id="resetBtn" class="secondary">Reset</button>
+                        <button type="button" id="importSample" class="secondary">Seed Sample</button>
+                    </div>
+
+                    <div class="totals" aria-hidden="false" style="margin-top:14px">
+                        <div class="tot-box">
+                            <div class="small">Total Pending</div>
+                            <div id="totalPending" class="tot-amount">$0.00</div>
+                        </div>
+                        <div class="tot-box">
+                            <div class="small">Total Approved</div>
+                            <div id="totalApproved" class="tot-amount">$0.00</div>
+                        </div>
+                        <div class="tot-box">
+                            <div class="small">Total Reimbursable</div>
+                            <div id="totalAll" class="tot-amount">$0.00</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="controls">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input id="search" type="text" placeholder="Search employee, note, category" style="padding:8px; border-radius:8px; border:1px solid #e6e9ef;">
+                        <select id="filterStatus" style="padding:8px; border-radius:8px; border:1px solid #e6e9ef;">
+                            <option value="">All statuses</option>
+                            <option>Pending</option>
+                            <option>Approved</option>
+                            <option>Rejected</option>
+                        </select>
+                        <select id="sortBy" style="padding:8px; border-radius:8px; border:1px solid #e6e9ef;">
+                            <option value="date_desc">Newest</option>
+                            <option value="date_asc">Oldest</option>
+                            <option value="amount_desc">Amount (high)</option>
+                            <option value="amount_asc">Amount (low)</option>
+                        </select>
+                    </div>
+
+                    <div class="filters">
+                        <button id="clearAll" class="secondary">Clear all</button>
+                        <div class="small">Saved locally</div>
+                    </div>
+                </div>
+
+                <div id="listWrap">
+                    <table id="listTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Employee</th>
+                                <th>Category</th>
+                                <th class="small">Amount</th>
+                                <th>Status</th>
+                                <th>Receipt</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listBody">
+                            <tr class="empty"><td colspan="7">No reimbursements yet. Add one on the left.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="preview" style="margin-top:12px"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+/* Local front-end reimbursement tool (single-file). Data stored in localStorage.
+     Features: add/edit/delete, file receipts stored as base64, filter/sort/search, totals.
+*/
+
+const LS_KEY = 'mrk_reimbursements_v1';
+const form = document.getElementById('reim-form');
+const editingId = document.getElementById('editingId');
+const dateEl = document.getElementById('date');
+const employeeEl = document.getElementById('employee');
+const categoryEl = document.getElementById('category');
+const amountEl = document.getElementById('amount');
+const descEl = document.getElementById('desc');
+const receiptEl = document.getElementById('receipt');
+const statusEl = document.getElementById('status');
+const saveBtn = document.getElementById('saveBtn');
+const resetBtn = document.getElementById('resetBtn');
+const importSample = document.getElementById('importSample');
+
+const listBody = document.getElementById('listBody');
+const searchEl = document.getElementById('search');
+const filterStatus = document.getElementById('filterStatus');
+const sortBy = document.getElementById('sortBy');
+const clearAll = document.getElementById('clearAll');
+
+const totalPending = document.getElementById('totalPending');
+const totalApproved = document.getElementById('totalApproved');
+const totalAll = document.getElementById('totalAll');
+const preview = document.getElementById('preview');
+
+let items = load();
+
+function uid(){ return 'r_'+Math.random().toString(36).slice(2,9); }
+
+function load(){
+    try{
+        const raw = localStorage.getItem(LS_KEY);
+        if(!raw) return [];
+        return JSON.parse(raw);
+    }catch(e){
+        console.error(e);
+        return [];
+    }
+}
+function save(){
+    localStorage.setItem(LS_KEY, JSON.stringify(items));
+    renderList();
+    renderTotals();
+}
+
+function resetForm(){
+    editingId.value = '';
+    form.reset();
+    saveBtn.textContent = 'Add Reimbursement';
+    preview.innerHTML = '';
+}
+
+resetBtn.addEventListener('click', e=>{ resetForm(); });
+
+receiptEl.addEventListener('change', ()=>{
+    const f = receiptEl.files[0];
+    if(!f) { preview.innerHTML=''; return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+        showPreview(reader.result, f.type);
+    };
+    reader.readAsDataURL(f);
+});
+
+function showPreview(dataUrl, mime){
+    if(!dataUrl) { preview.innerHTML=''; return; }
+    if(mime && mime.indexOf('image')!==-1){
+        preview.innerHTML = `<img class="receipt-preview" src="${dataUrl}" alt="receipt">`;
+    }else{
+        preview.innerHTML = `<div style="padding:12px; border-radius:8px; background:#fff; border:1px solid #eef2ff"><a href="${dataUrl}" target="_blank">Open receipt</a></div>`;
+    }
+}
+
+form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    saveBtn.disabled = true;
+
+    let receiptData = null;
+    const f = receiptEl.files[0];
+    if(f){
+        receiptData = await fileToDataURL(f);
+    }
+
+    const obj = {
+        id: editingId.value || uid(),
+        date: dateEl.value || new Date().toISOString().slice(0,10),
+        employee: employeeEl.value.trim(),
+        category: categoryEl.value,
+        amount: parseFloat(parseFloat(amountEl.value || 0).toFixed(2)),
+        description: descEl.value.trim(),
+        receipt: receiptData, // null or { dataUrl, type, name }
+        status: statusEl.value,
+        createdAt: new Date().toISOString()
+    };
+
+    if(editingId.value){
+        const i = items.findIndex(x=>x.id===editingId.value);
+        if(i>=0) items[i] = obj;
+    }else{
+        items.push(obj);
+    }
+
+    save();
+    resetForm();
+    saveBtn.disabled = false;
+});
+
+function fileToDataURL(file){
+    return new Promise((res,rej)=>{
+        const r = new FileReader();
+        r.onload = ()=> res({ dataUrl:r.result, type:file.type, name:file.name });
+        r.onerror = rej;
+        r.readAsDataURL(file);
+    });
+}
+
+function formatMoney(n){ return '$'+(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function renderTotals(){
+    const totPending = items.filter(x=>x.status==='Pending').reduce((s,x)=>s+x.amount,0);
+    const totApproved = items.filter(x=>x.status==='Approved').reduce((s,x)=>s+x.amount,0);
+    const totAll = items.reduce((s,x)=>s+x.amount,0);
+    totalPending.textContent = formatMoney(totPending);
+    totalApproved.textContent = formatMoney(totApproved);
+    totalAll.textContent = formatMoney(totAll);
+}
+
+function renderList(){
+    const q = (searchEl.value||'').toLowerCase();
+    const statusF = filterStatus.value;
+    let out = items.slice();
+
+    // filters
+    if(statusF) out = out.filter(x=>x.status===statusF);
+    if(q) out = out.filter(x=>{
+        return x.employee.toLowerCase().includes(q)
+            || x.category.toLowerCase().includes(q)
+            || (x.description||'').toLowerCase().includes(q)
+            || (x.amount+'').includes(q);
+    });
+
+    // sort
+    const s = sortBy.value || 'date_desc';
+    if(s==='date_desc') out.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    if(s==='date_asc') out.sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+    if(s==='amount_desc') out.sort((a,b)=> b.amount - a.amount);
+    if(s==='amount_asc') out.sort((a,b)=> a.amount - b.amount);
+
+    // render
+    listBody.innerHTML = '';
+    if(out.length===0){
+        listBody.innerHTML = `<tr class="empty"><td colspan="7" class="empty">No reimbursements match.</td></tr>`;
+        return;
+    }
+
+    for(const it of out){
+        const tr = document.createElement('tr');
+
+        const tdDate = document.createElement('td'); tdDate.textContent = it.date;
+        const tdEmp = document.createElement('td'); tdEmp.textContent = it.employee;
+        const tdCat = document.createElement('td'); tdCat.textContent = it.category;
+        const tdAmt = document.createElement('td'); tdAmt.textContent = formatMoney(it.amount);
+        const tdStatus = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + (it.status.toLowerCase());
+        badge.textContent = it.status;
+        tdStatus.appendChild(badge);
+
+        const tdRec = document.createElement('td');
+        if(it.receipt && it.receipt.dataUrl){
+            const a = document.createElement('a');
+            a.href = it.receipt.dataUrl;
+            a.target = '_blank';
+            a.textContent = it.receipt.name || 'View';
+            tdRec.appendChild(a);
+        }else{
+            tdRec.textContent = '-';
+            tdRec.className = 'small';
+        }
+
+        const tdAct = document.createElement('td');
+        tdAct.className = 'actions small';
+
+        const btnView = document.createElement('button');
+        btnView.className = 'secondary';
+        btnView.textContent = 'Preview';
+        btnView.onclick = ()=> {
+            if(it.receipt && it.receipt.dataUrl){
+                showPreview(it.receipt.dataUrl, it.receipt.type);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                preview.innerHTML = '<div class="empty">No receipt attached</div>';
+            }
+        };
+        tdAct.appendChild(btnView);
+
+        const btnEdit = document.createElement('button');
+        btnEdit.textContent = 'Edit';
+        btnEdit.onclick = ()=> {
+            editingId.value = it.id;
+            dateEl.value = it.date;
+            employeeEl.value = it.employee;
+            categoryEl.value = it.category;
+            amountEl.value = it.amount;
+            descEl.value = it.description;
+            statusEl.value = it.status;
+            saveBtn.textContent = 'Save Changes';
+            if(it.receipt && it.receipt.dataUrl){
+                showPreview(it.receipt.dataUrl, it.receipt.type);
+            } else preview.innerHTML = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        tdAct.appendChild(btnEdit);
+
+        const btnToggle = document.createElement('button');
+        btnToggle.textContent = (it.status==='Pending') ? 'Approve' : (it.status==='Approved' ? 'Reject' : 'Pending');
+        btnToggle.onclick = ()=> {
+            const next = (it.status==='Pending') ? 'Approved' : (it.status==='Approved' ? 'Rejected' : 'Pending');
+            it.status = next;
+            save();
+        };
+        tdAct.appendChild(btnToggle);
+
+        const btnDel = document.createElement('button');
+        btnDel.style.background = 'var(--danger)';
+        btnDel.textContent = 'Delete';
+        btnDel.onclick = ()=> {
+            if(!confirm('Delete this reimbursement?')) return;
+            items = items.filter(x=>x.id!==it.id);
+            save();
+        };
+        tdAct.appendChild(btnDel);
+
+        tr.appendChild(tdDate);
+        tr.appendChild(tdEmp);
+        tr.appendChild(tdCat);
+        tr.appendChild(tdAmt);
+        tr.appendChild(tdStatus);
+        tr.appendChild(tdRec);
+        tr.appendChild(tdAct);
+        listBody.appendChild(tr);
+    }
+}
+
+searchEl.addEventListener('input', ()=> renderList());
+filterStatus.addEventListener('change', ()=> renderList());
+sortBy.addEventListener('change', ()=> renderList());
+clearAll.addEventListener('click', ()=>{
+    if(!confirm('Clear all reimbursements from local storage?')) return;
+    items = [];
+    save();
+    resetForm();
+});
+
+importSample.addEventListener('click', ()=>{
+    if(items.length>0 && !confirm('Add sample items in addition to existing?')) return;
+    const now = new Date();
+    const s = [
+        { date: dateStr(daysAgo(2)), employee:'Alice Johnson', category:'Travel', amount:123.45, description:'Taxi from airport', status:'Pending'},
+        { date: dateStr(daysAgo(9)), employee:'Mark S.', category:'Meals', amount:54.20, description:'Team lunch', status:'Approved'},
+        { date: dateStr(daysAgo(1)), employee:'Priya K', category:'Office Supplies', amount:18.99, description:'Stationery', status:'Pending'},
+    ];
+    for(const it of s){
+        items.push(Object.assign({ id: uid(), createdAt:new Date().toISOString(), receipt:null }, it));
+    }
+    save();
+});
+
+function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d; }
+function dateStr(d){ return d.toISOString().slice(0,10); }
+
+// initial seed and render
+renderList();
+renderTotals();
+
+// convenience: save on unload
+window.addEventListener('beforeunload', ()=> localStorage.setItem(LS_KEY, JSON.stringify(items)));
+</script>
+</body>
+</html>
